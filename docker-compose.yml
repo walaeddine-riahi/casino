@@ -1,0 +1,113 @@
+version: '3.7'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=password
+      - MONGO_INITDB_DATABASE=test
+    ports:
+      - 27017:27017
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - casino_app_net
+
+  rabbitmq:
+    image: rabbitmq:latest
+    container_name: rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - /var/lib/rabbitmq
+    networks:
+      - casino_app_net
+
+  gateway_service:
+    image: gateway-service
+    container_name: gateway_service
+    environment:
+      - MONGO_DSN=mongodb://root:password@mongodb:27017
+      - AUTHENTICATION_SERVICE_HOST=authentication_service
+      - USER_SERVICE_HOST=user_service
+      - PROMOTION_SERVICE_HOST=promotion_service
+      - PORT=8000
+    ports:
+      - 8000:8000
+    networks:
+      - casino_app_net
+
+  notification_service:
+    image: notification-service
+    container_name: notification_service
+    environment:
+      - MONGO_DSN=mongodb://root:password@mongodb:27017
+      - MESSAGE_BROKER_SERVICE_QUEUE_NAME=promotion_queue
+      - MESSAGE_BROKER_SERVICE_QUEUE_URL=amqp://rabbitmq:5672
+      - PORT=8001
+    ports:
+      - 8001:8001
+    networks:
+      - casino_app_net
+    depends_on:
+      - rabbitmq
+
+  authentication_service:
+    image: authentication-service
+    container_name: authentication_service
+    environment:
+      - MONGO_DSN=mongodb://root:password@mongodb:27017
+      - USER_SERVICE_HOST=user_service
+      - PORT=8002
+      - ACCESS_SECRET=access_secret
+      - REFRESH_SECRET=refresh_secret
+    ports:
+      - 8002:8002
+    networks:
+      - casino_app_net
+    depends_on:
+      - mongodb
+      - rabbitmq
+
+  user_service:
+    image: user-service
+    container_name: user_service
+    environment:
+      - MONGO_DSN=mongodb://root:password@mongodb:27017
+      - PROMOTION_SERVICE_HOST=promotion_service
+      - PORT=8003
+    ports:
+      - 8003:8003
+    networks:
+      - casino_app_net
+    depends_on:
+      - mongodb
+      - rabbitmq
+
+  promotion_service:
+    image: promotion-service
+    container_name: promotion_service
+    environment:
+      - MONGO_DSN=mongodb://root:password@mongodb:27017
+      - MESSAGE_BROKER_SERVICE_QUEUE_NAME=promotion_queue
+      - MESSAGE_BROKER_SERVICE_QUEUE_URL=amqp://rabbitmq:5672
+      - PORT=8004
+      - USER_SERVICE_HOST=user_service
+    ports:
+      - 8004:8004
+    networks:
+      - casino_app_net
+    depends_on:
+      - mongodb
+      - rabbitmq
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  casino_app_net:
+    driver: bridge
